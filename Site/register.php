@@ -1,22 +1,33 @@
 <?php
 require_once 'db.php';
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $username = $_POST['username'];
-    $phone = $_POST['phone'];
-    $email = $_POST['email'];
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
 
-    $sql = "INSERT INTO users (username, phone, email, password) VALUES (?, ?, ?, ?)";
-    $stmt = $conn->prepare($sql);
-    $stmt->bind_param("ssss", $username, $phone, $email, $password);
-    if ($stmt->execute()) {
-        header("Location: login.php");
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $username = trim($_POST['username'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
+
+    // Валидация (можно расширить)
+    if ($username && $phone && $email && $password) {
+        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+
+        try {
+            $stmt = $conn->prepare("INSERT INTO users (username, phone, email, password) VALUES (:username, :phone, :email, :password)");
+            $stmt->execute([
+                ':username' => $username,
+                ':phone'    => $phone,
+                ':email'    => $email,
+                ':password' => $hashed_password
+            ]);
+            header("Location: login.php");
+            exit();
+        } catch (PDOException $e) {
+            echo "Ошибка регистрации: " . $e->getMessage();
+        }
     } else {
-        echo "Ошибка регистрации";
+        echo "Пожалуйста, заполните все поля!";
     }
-    $stmt->close();
 }
-$conn->close();
 ?>
 <!DOCTYPE html>
 <html lang="ru">
