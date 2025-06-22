@@ -1,10 +1,9 @@
 <?php
-// Запускаем сессию, если еще не запущена
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-require_once 'db.php';  // должен содержать подключение $pdo через PDO к PostgreSQL
+require_once 'db.php';
 
 // Получаем параметры фильтрации из GET с безопасной обработкой
 $types = $_GET['types'] ?? [];
@@ -40,85 +39,84 @@ if (!empty($materials) && is_array($materials)) {
     $params = array_merge($params, $materials);
 }
 
-$stmt = $pdo->prepare($sql);
+// Подготавливаем и выполняем запрос через PDO
+$stmt = $conn->prepare($sql);
 $stmt->execute($params);
-$result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+// Получаем результат
+$result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
     <meta charset="UTF-8">
     <title>Каталог - Timber Soul</title>
     <link rel="stylesheet" href="styles.css">
 </head>
-
 <body>
+<div class="container">
 
-    <div class="container">
+    <div class="container_content">
+        <?php require_once 'header.php'; ?>
+    </div>
+    <main>
 
-        <div class="container_content">
-            <?php require_once 'header.php'; ?>
-        </div>
-        <main>
+        <section class="container_content catalog-page">
+            <div class="catalog_header">
+                <h1>Каталог</h1>
+                <!-- ... остальная часть шапки ... -->
+            </div>
 
-            <section class="container_content catalog-page">
-                <div class="catalog_header">
-                    <h1>Каталог</h1>
+            <div class="catalog-layout">
+                <!-- Блок фильтров -->
+                <aside class="filters-sidebar">
+                    <form id="filter-form">
+                        <!-- ... фильтры ... -->
+                    </form>
+                </aside>
 
-                    <div class="sort_not_title">
-                        <div class="sort_block">
-                            <span class="sort_how">Сортировать:</span>
-                            <select id="sort-select">
-                                <option value="">по популярности</option>
-                                <option value="price-asc">по цене</option>
-                                <option value="name-asc">по имени (А-Я)</option>
-                                <option value="name-desc">по имени (Я-А)</option>
-                            </select>
-                        </div>
-                        <div class="sorting-options">
-                            <div class="header-counters">
-                                <a href="#" class="counter like-counter">
-                                    <!-- svg здесь -->
-                                    <span class="counter-badge">0</span>
-                                </a>
-                                <a href="cart.php" class="counter cart-counter">
-                                    <!-- svg здесь -->
-                                    <span class="counter-badge">0</span>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="catalog-layout">
-                    <!-- Блок фильтров -->
-                    <aside class="filters-sidebar">
-                        <form id="filter-form">
-                            <div class="filter-group">
-                                <h3>Тип товара</h3>
-                                <div class="filter-options">
-                                    <label><input type="checkbox" name="types[]" value="кровать" <?php echo in_array('кровать', $types) ? 'checked' : ''; ?>> Кровати</label>
-                                    <label><input type="checkbox" name="types[]" value="шкаф" <?php echo in_array('шкаф', $types) ? 'checked' : ''; ?>> Шкафы</label>
-                                    <label><input type="checkbox" name="types[]" value="кухонный гарнитур" <?php echo in_array('кухонный гарнитур', $types) ? 'checked' : ''; ?>> Кухонные гарнитуры</label>
-                                    <label><input type="checkbox" name="types[]" value="модульная кухня" <?php echo in_array('модульная кухня', $types) ? 'checked' : ''; ?>> Модульные кухни</label>
-                                    <label><input type="checkbox" name="types[]" value="тумба" <?php echo in_array('тумба', $types) ? 'checked' : ''; ?>> Тумбы</label>
-                                    <label><input type="checkbox" name="types[]" value="комод" <?php echo in_array('комод', $types) ? 'checked' : ''; ?>> Комоды</label>
+                <!-- Блок товаров -->
+                <div class="products-flex">
+                    <?php if (!empty($result)): ?>
+                        <?php foreach ($result as $row): ?>
+                            <div class="product-card" data-id="<?php echo $row['id']; ?>">
+                                <div class="product-image">
+                                    <img src="./img/<?php echo htmlspecialchars($row['image']); ?>" alt="<?php echo htmlspecialchars($row['name']); ?>" onclick="window.location.href='product.php?id=<?php echo $row['id']; ?>'">
                                 </div>
-                            </div>
-
-                            <div class="filter-group">
-                                <h3>Цена, ₽</h3>
-                                <div class="filter-options">
-                                    <div class="price-range">
-                                        <input type="number" name="price_min" placeholder="от 40" value="<?php echo htmlspecialchars($price_min); ?>">
-                                        <input type="number" name="price_max" placeholder="до 2312455" value="<?php echo htmlspecialchars($price_max); ?>">
+                                <div class="product-info">
+                                    <div class="price-section">
+                                        <span class="current-price"><?php echo number_format($row['price'], 0, '', ' '); ?> ₽</span>
+                                        <span class="old-price"><?php echo number_format($row['old_price'], 0, '', ' '); ?> ₽</span>
+                                        <span class="discount">-<?php echo $row['discount']; ?>%</span>
+                                    </div>
+                                    <h3 class="product-name"><?php echo htmlspecialchars($row['name']); ?></h3>
+                                    <div class="product-specs">
+                                        <p>Ширина: <span><?php echo htmlspecialchars($row['width']); ?> </span></p>
+                                        <p>Высота: <span><?php echo htmlspecialchars($row['height']); ?></span></p>
+                                        <p>Глубина: <span><?php echo htmlspecialchars($row['depth']); ?> </span></p>
+                                    </div>
+                                    <div class="buttons_product">
+                                        <button class="btn add-to-cart">В корзину </button>
+                                        <button class="to_like like-btn">
+                                            <svg width="22" height="20" viewBox="0 0 22 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                                <path d="M2.66275 11.2136L8.82377 17.7066C10.0068 18.9533 11.9932 18.9533 13.1762 17.7066L19.3372 11.2136C21.5542 8.87708 21.5543 5.08892 19.3373 2.75244C17.1203 0.415973 13.5258 0.415974 11.3088 2.75245V2.75245C11.1409 2.92935 10.8591 2.92935 10.6912 2.75245V2.75245C8.47421 0.415974 4.87975 0.415974 2.66275 2.75245C0.44575 5.08892 0.445751 8.87708 2.66275 11.2136Z" stroke="white" stroke-width="1.5" />
+                                            </svg>
+                                        </button>
                                     </div>
                                 </div>
                             </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <div class="no-results">
+                            <p>Товары не найдены. Попробуйте изменить параметры фильтрации.</p>
+                        </div>
+                    <?php endif; ?>
+                </div>
+            </div>
+        </section>
+    </main>
 
-                            <div class="filter-group">
-                                <h3>Материал корпуса</h3>
-                                <div class="filter-options">
-                                    <label><input type="checkbox" name="materials[]" value="береза" <?php echo in_array('береза', $materials) ? 'checked' : ''; ?_
+</div>
+<script src="script.js"></script>
+</body>
+</html>
