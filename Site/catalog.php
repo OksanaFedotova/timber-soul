@@ -4,7 +4,7 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-require_once 'db.php';
+require_once 'db.php';  // должен содержать подключение $pdo через PDO к PostgreSQL
 
 // Получаем параметры фильтрации из GET с безопасной обработкой
 $types = $_GET['types'] ?? [];
@@ -15,13 +15,11 @@ $materials = $_GET['materials'] ?? [];
 // Формируем SQL с подготовленными параметрами
 $sql = "SELECT * FROM products WHERE 1=1";
 $params = [];
-$types_placeholder = '';
-$materials_placeholder = '';
 
 // Фильтр по типу (если есть)
 if (!empty($types) && is_array($types)) {
-    $types_placeholder = implode(',', array_fill(0, count($types), '?'));
-    $sql .= " AND type IN ($types_placeholder)";
+    $placeholders = implode(',', array_fill(0, count($types), '?'));
+    $sql .= " AND type IN ($placeholders)";
     $params = array_merge($params, $types);
 }
 
@@ -37,42 +35,14 @@ if ($price_max !== '' && is_numeric($price_max)) {
 
 // Фильтр по материалу (если есть)
 if (!empty($materials) && is_array($materials)) {
-    $materials_placeholder = implode(',', array_fill(0, count($materials), '?'));
-    $sql .= " AND material IN ($materials_placeholder)";
+    $placeholders = implode(',', array_fill(0, count($materials), '?'));
+    $sql .= " AND material IN ($placeholders)";
     $params = array_merge($params, $materials);
 }
 
-// Подготовка запроса
-$stmt = $conn->prepare($sql);
-if ($stmt === false) {
-    die('Ошибка подготовки запроса: ' . $conn->error);
-}
-
-// Определяем типы параметров для bind_param (все строки или числа)
-// Пусть price_min и price_max - числа (d), остальные строки (s)
-$types_str = '';
-foreach ($params as $p) {
-    if (is_numeric($p)) {
-        $types_str .= 'd';
-    } else {
-        $types_str .= 's';
-    }
-}
-
-// Привязываем параметры, если они есть
-if (!empty($params)) {
-    // Чтобы передать массив в bind_param через call_user_func_array, надо делать по-своему
-    $bind_names[] = $types_str;
-    for ($i = 0; $i < count($params); $i++) {
-        $bind_name = 'bind' . $i;
-        $$bind_name = $params[$i];
-        $bind_names[] = &$$bind_name;
-    }
-    call_user_func_array([$stmt, 'bind_param'], $bind_names);
-}
-
-$stmt->execute();
-$result = $stmt->get_result();
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$result = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 ?>
 <!DOCTYPE html>
@@ -110,15 +80,11 @@ $result = $stmt->get_result();
                         <div class="sorting-options">
                             <div class="header-counters">
                                 <a href="#" class="counter like-counter">
-                                    <svg width="24" height="24" viewBox="0 0 24 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M2.66275 11.2136L8.82377 17.7066C10.0068 18.9533 11.9932 18.9533 13.1762 17.7066L19.3372 11.2136C21.5542 8.87708 21.5543 5.08892 19.3373 2.75244C17.1203 0.415973 13.5258 0.415974 11.3088 2.75245V2.75245C11.1409 2.92935 10.8591 2.92935 10.6912 2.75245V2.75245C8.47421 0.415974 4.87975 0.415974 2.66275 2.75245C0.44575 5.08892 0.445751 8.87708 2.66275 11.2136Z" stroke="#6B6B6B" stroke-width="1.5" />
-                                    </svg>
+                                    <!-- svg здесь -->
                                     <span class="counter-badge">0</span>
                                 </a>
                                 <a href="cart.php" class="counter cart-counter">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                        <path d="M8 10V6C8 3.79086 9.79086 2 12 2C14.2091 2 16 3.79086 16 6V10M3 10H21L20.0826 18.3255C19.935 20.0173 18.5075 21.3101 16.811 21.2539L15.3774 21.2066C13.9299 21.1585 12.0701 21.1585 10.6226 21.2066L9.18904 21.2539C7.49251 21.3101 6.06503 20.0173 5.91745 18.3255L5 10H3Z" stroke="#6B6B6B" stroke-width="1.5" />
-                                    </svg>
+                                    <!-- svg здесь -->
                                     <span class="counter-badge">0</span>
                                 </a>
                             </div>
@@ -155,63 +121,4 @@ $result = $stmt->get_result();
                             <div class="filter-group">
                                 <h3>Материал корпуса</h3>
                                 <div class="filter-options">
-                                    <label><input type="checkbox" name="materials[]" value="береза" <?php echo in_array('береза', $materials) ? 'checked' : ''; ?>> Березовый массив</label>
-                                    <label><input type="checkbox" name="materials[]" value="дуб" <?php echo in_array('дуб', $materials) ? 'checked' : ''; ?>> Дубовый массив</label>
-                                    <label><input type="checkbox" name="materials[]" value="ясень" <?php echo in_array('ясень', $materials) ? 'checked' : ''; ?>> Ясеневый массив</label>
-                                    <label><input type="checkbox" name="materials[]" value="бук" <?php echo in_array('бук', $materials) ? 'checked' : ''; ?>> Буковый массив</label>
-                                </div>
-                            </div>
-
-                            <div class="filter-actions">
-                                <button type="submit" class="btn apply-btn">Применить</button>
-                                <button type="button" class="btn clear-btn" onclick="clearFilters()">Очистить фильтр</button>
-                            </div>
-                        </form>
-                    </aside>
-
-                    <!-- Блок товаров -->
-                    <div class="products-flex">
-                        <?php if ($result && $result->num_rows > 0): ?>
-                            <?php while ($row = $result->fetch_assoc()): ?>
-                                <div class="product-card" data-id="<?php echo $row['id']; ?>">
-                                    <div class="product-image">
-                                        <img src="./img/<?php echo htmlspecialchars($row['image']); ?>" alt="<?php echo htmlspecialchars($row['name']); ?>" onclick="window.location.href='product.php?id=<?php echo $row['id']; ?>'">
-                                    </div>
-                                    <div class="product-info">
-                                        <div class="price-section">
-                                            <span class="current-price"><?php echo number_format($row['price'], 0, '', ' '); ?> ₽</span>
-                                            <span class="old-price"><?php echo number_format($row['old_price'], 0, '', ' '); ?> ₽</span>
-                                            <span class="discount">-<?php echo $row['discount']; ?>%</span>
-                                        </div>
-                                        <h3 class="product-name"><?php echo htmlspecialchars($row['name']); ?></h3>
-                                        <div class="product-specs">
-                                            <p>Ширина: <span><?php echo htmlspecialchars($row['width']); ?> </span></p>
-                                            <p>Высота: <span><?php echo htmlspecialchars($row['height']); ?></span></p>
-                                            <p>Глубина: <span><?php echo htmlspecialchars($row['depth']); ?> </span></p>
-                                        </div>
-                                        <div class="buttons_product">
-                                            <button class="btn add-to-cart">В корзину </button>
-                                            <button class="to_like like-btn">
-                                                <svg width="22" height="20" viewBox="0 0 22 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                                    <path d="M2.66275 11.2136L8.82377 17.7066C10.0068 18.9533 11.9932 18.9533 13.1762 17.7066L19.3372 11.2136C21.5542 8.87708 21.5543 5.08892 19.3373 2.75244C17.1203 0.415973 13.5258 0.415974 11.3088 2.75245V2.75245C11.1409 2.92935 10.8591 2.92935 10.6912 2.75245V2.75245C8.47421 0.415974 4.87975 0.415974 2.66275 2.75245C0.44575 5.08892 0.445751 8.87708 2.66275 11.2136Z" stroke="white" stroke-width="1.5" />
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            <?php endwhile; ?>
-                        <?php else: ?>
-                            <div class="no-results">
-                                <p>Товары не найдены. Попробуйте изменить параметры фильтрации.</p>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </section>
-        </main>
-
-    </div>
-    <script src="script.js"></script>
-</body>
-
-</html>
+                                    <label><input type="checkbox" name="materials[]" value="береза" <?php echo in_array('береза', $materials) ? 'checked' : ''; ?_
