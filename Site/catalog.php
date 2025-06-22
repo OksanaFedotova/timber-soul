@@ -1,39 +1,79 @@
 <?php
-session_start();
+// Запускаем сессию, если еще не запущена
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
 require_once 'db.php';
 
-// Получаем параметры фильтрации
+// Получаем параметры фильтрации из GET с безопасной обработкой
 $types = $_GET['types'] ?? [];
 $price_min = $_GET['price_min'] ?? '';
 $price_max = $_GET['price_max'] ?? '';
 $materials = $_GET['materials'] ?? [];
 
-// Формируем SQL запрос
+// Формируем SQL с подготовленными параметрами
 $sql = "SELECT * FROM products WHERE 1=1";
+$params = [];
+$types_placeholder = '';
+$materials_placeholder = '';
 
-// Фильтр по типу
-if (!empty($types)) {
-    $types_str = implode("','", $types);
-    $sql .= " AND type IN ('$types_str')";
+// Фильтр по типу (если есть)
+if (!empty($types) && is_array($types)) {
+    $types_placeholder = implode(',', array_fill(0, count($types), '?'));
+    $sql .= " AND type IN ($types_placeholder)";
+    $params = array_merge($params, $types);
 }
 
 // Фильтр по цене
-if ($price_min !== '') {
-    $sql .= " AND price >= $price_min";
+if ($price_min !== '' && is_numeric($price_min)) {
+    $sql .= " AND price >= ?";
+    $params[] = $price_min;
 }
-if ($price_max !== '') {
-    $sql .= " AND price <= $price_max";
-}
-
-
-// Фильтр по материалу
-if (!empty($materials)) {
-    $materials_str = implode("','", $materials);
-    $sql .= " AND material IN ('$materials_str')";
+if ($price_max !== '' && is_numeric($price_max)) {
+    $sql .= " AND price <= ?";
+    $params[] = $price_max;
 }
 
+// Фильтр по материалу (если есть)
+if (!empty($materials) && is_array($materials)) {
+    $materials_placeholder = implode(',', array_fill(0, count($materials), '?'));
+    $sql .= " AND material IN ($materials_placeholder)";
+    $params = array_merge($params, $materials);
+}
 
-$result = $conn->query($sql);
+// Подготовка запроса
+$stmt = $conn->prepare($sql);
+if ($stmt === false) {
+    die('Ошибка подготовки запроса: ' . $conn->error);
+}
+
+// Определяем типы параметров для bind_param (все строки или числа)
+// Пусть price_min и price_max - числа (d), остальные строки (s)
+$types_str = '';
+foreach ($params as $p) {
+    if (is_numeric($p)) {
+        $types_str .= 'd';
+    } else {
+        $types_str .= 's';
+    }
+}
+
+// Привязываем параметры, если они есть
+if (!empty($params)) {
+    // Чтобы передать массив в bind_param через call_user_func_array, надо делать по-своему
+    $bind_names[] = $types_str;
+    for ($i = 0; $i < count($params); $i++) {
+        $bind_name = 'bind' . $i;
+        $$bind_name = $params[$i];
+        $bind_names[] = &$$bind_name;
+    }
+    call_user_func_array([$stmt, 'bind_param'], $bind_names);
+}
+
+$stmt->execute();
+$result = $stmt->get_result();
+
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -49,9 +89,7 @@ $result = $conn->query($sql);
     <div class="container">
 
         <div class="container_content">
-            <?php
-            require_once 'header.php';
-            ?>
+            <?php require_once 'header.php'; ?>
         </div>
         <main>
 
@@ -68,7 +106,6 @@ $result = $conn->query($sql);
                                 <option value="name-asc">по имени (А-Я)</option>
                                 <option value="name-desc">по имени (Я-А)</option>
                             </select>
-
                         </div>
                         <div class="sorting-options">
                             <div class="header-counters">
@@ -85,7 +122,6 @@ $result = $conn->query($sql);
                                     <span class="counter-badge">0</span>
                                 </a>
                             </div>
-
                         </div>
                     </div>
                 </div>
@@ -110,8 +146,8 @@ $result = $conn->query($sql);
                                 <h3>Цена, ₽</h3>
                                 <div class="filter-options">
                                     <div class="price-range">
-                                        <input type="number" name="price_min" placeholder="от 40" value="<?php echo $price_min; ?>">
-                                        <input type="number" name="price_max" placeholder="до 2312455" value="<?php echo $price_max; ?>">
+                                        <input type="number" name="price_min" placeholder="от 40" value="<?php echo htmlspecialchars($price_min); ?>">
+                                        <input type="number" name="price_max" placeholder="до 2312455" value="<?php echo htmlspecialchars($price_max); ?>">
                                     </div>
                                 </div>
                             </div>
@@ -135,11 +171,11 @@ $result = $conn->query($sql);
 
                     <!-- Блок товаров -->
                     <div class="products-flex">
-                        <?php if ($result->num_rows > 0): ?>
+                        <?php if ($result && $result->num_rows > 0): ?>
                             <?php while ($row = $result->fetch_assoc()): ?>
                                 <div class="product-card" data-id="<?php echo $row['id']; ?>">
                                     <div class="product-image">
-                                        <img src="./img/<?php echo $row['image']; ?>" alt="<?php echo $row['name']; ?>" onclick="window.location.href='product.php?id=<?php echo $row['id']; ?>'">
+                                        <img src="./img/<?php echo htmlspecialchars($row['image']); ?>" alt="<?php echo htmlspecialchars($row['name']); ?>" onclick="window.location.href='product.php?id=<?php echo $row['id']; ?>'">
                                     </div>
                                     <div class="product-info">
                                         <div class="price-section">
@@ -147,11 +183,11 @@ $result = $conn->query($sql);
                                             <span class="old-price"><?php echo number_format($row['old_price'], 0, '', ' '); ?> ₽</span>
                                             <span class="discount">-<?php echo $row['discount']; ?>%</span>
                                         </div>
-                                        <h3 class="product-name"><?php echo $row['name']; ?></h3>
+                                        <h3 class="product-name"><?php echo htmlspecialchars($row['name']); ?></h3>
                                         <div class="product-specs">
-                                            <p>Ширина: <span><?php echo $row['width']; ?> </span></p>
-                                            <p>Высота: <span><?php echo $row['height']; ?></span></p>
-                                            <p>Глубина: <span><?php echo $row['depth']; ?> </span></p>
+                                            <p>Ширина: <span><?php echo htmlspecialchars($row['width']); ?> </span></p>
+                                            <p>Высота: <span><?php echo htmlspecialchars($row['height']); ?></span></p>
+                                            <p>Глубина: <span><?php echo htmlspecialchars($row['depth']); ?> </span></p>
                                         </div>
                                         <div class="buttons_product">
                                             <button class="btn add-to-cart">В корзину </button>
@@ -179,4 +215,3 @@ $result = $conn->query($sql);
 </body>
 
 </html>
-<?php $conn->close(); ?>

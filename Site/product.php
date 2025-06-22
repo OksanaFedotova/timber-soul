@@ -1,5 +1,4 @@
 <?php
-session_start();
 require_once 'db.php';
 
 $product_id = $_GET['id'] ?? 0;
